@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>烘焙曲線輸入設計</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        table { border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #000; padding: 8px; text-align: center; }
+        input { width: 50px; }
+        #timer { font-size: 36px; color: red; font-weight: bold; margin-left: 10px; }
+        #targetTemp { font-size: 36px; color: blue; margin-left: 20px; }
+        .btn-log { margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<h2>烘焙曲線設定</h2>
+<div>
+    <button id="startStop">計時開始</button>
+    <button id="resetBtn">重設</button>
+    <br>
+    <span id="timer">00:00</span>
+    <span id="targetTemp">目標溫度: 0°C</span>
+    <br>
+
+    <span>一爆:</span>
+    <button id="firstCrackStart" class="btn-log">開始</button><span id="fcStartTime"></span>
+    <button id="firstCrackEnd" class="btn-log">結束</button><span id="fcEndTime"></span>
+</div>
+
+<table>
+    <thead>
+    <tr>
+        <th>階段</th>
+        <th>分鐘</th>
+        <th>秒</th>
+        <th>溫度 (°C)</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td>入豆</td>
+        <td><input type="number" id="min0" value="0" min="0"></td>
+        <td><input type="number" id="sec0" value="0" min="0" max="59"></td>
+        <td><input type="number" id="temp0" value="150"></td>
+    </tr>
+    <tr>
+        <td>回溫</td>
+        <td><input type="number" id="min1" value="1" min="0"></td>
+        <td><input type="number" id="sec1" value="0" min="0" max="59"></td>
+        <td><input type="number" id="temp1" value="120"></td>
+    </tr>
+    <tr>
+        <td>梅納期開始</td>
+        <td><input type="number" id="min2" value="4" min="0"></td>
+        <td><input type="number" id="sec2" value="0" min="0" max="59"></td>
+        <td><input type="number" id="temp2" value="160"></td>
+    </tr>
+    <tr>
+        <td>發展期開始</td>
+        <td><input type="number" id="min3" value="7" min="0"></td>
+        <td><input type="number" id="sec3" value="0" min="0" max="59"></td>
+        <td><input type="number" id="temp3" value="185"></td>
+    </tr>
+    <tr>
+        <td>出鍋</td>
+        <td><input type="number" id="min4" value="10" min="0"></td>
+        <td><input type="number" id="sec4" value="30" min="0" max="59"></td>
+        <td><input type="number" id="temp4" value="205"></td>
+    </tr>
+    </tbody>
+</table>
+
+<img id="curveImage" src="" alt="烘焙曲線圖片" style="width:800px;height:400px;border:1px solid #000;">
+
+<script>
+    let seconds = 0;
+    let running = false;
+    let timerInterval = null;
+    let targetInterval = null;
+    const timerEl = document.getElementById('timer');
+    const startStopBtn = document.getElementById('startStop');
+    const resetBtn = document.getElementById('resetBtn');
+    const targetTempEl = document.getElementById('targetTemp');
+    const fcStartEl = document.getElementById('fcStartTime');
+    const fcEndEl = document.getElementById('fcEndTime');
+    const inputs = [];
+    for(let i=0;i<5;i++){
+        inputs.push(document.getElementById('min'+i));
+        inputs.push(document.getElementById('sec'+i));
+        inputs.push(document.getElementById('temp'+i));
+    }
+
+    function updateTimer() {
+        const mm = String(Math.floor(seconds / 60)).padStart(2,'0');
+        const ss = String(Math.floor(seconds % 60)).padStart(2,'0');
+        timerEl.textContent = `${mm}:${ss}`;
+    }
+
+    function updateTargetTemp() {
+        const elapsed = seconds;
+        const times = [];
+        for(let i=0;i<5;i++) times.push(parseInt(document.getElementById('min'+i).value)*60 + parseInt(document.getElementById('sec'+i).value));
+        const temps = [];
+        for(let i=0;i<5;i++) temps.push(parseFloat(document.getElementById('temp'+i).value));
+
+        let tempNow = temps[0];
+        if(elapsed<=times[0]) tempNow=temps[0];
+        else if(elapsed>=times[4]) tempNow=temps[4];
+        else {
+            for(let i=0;i<4;i++){
+                if(elapsed>=times[i] && elapsed<=times[i+1]){
+                    const ratio=(elapsed-times[i])/(times[i+1]-times[i]);
+                    tempNow=temps[i]+ratio*(temps[i+1]-temps[i]);
+                    break;
+                }
+            }
+        }
+        targetTempEl.textContent=`目標溫度: ${tempNow.toFixed(1)}°C`;
+    }
+
+    startStopBtn.addEventListener('click',()=>{
+        running = !running;
+        if(running){
+            startStopBtn.textContent='停止';
+            inputs.forEach(input=>input.disabled=true);
+            timerInterval=setInterval(()=>{ seconds+=0.1; updateTimer(); },100);
+            targetInterval=setInterval(updateTargetTemp,100);
+        }else{
+            startStopBtn.textContent='開始';
+            clearInterval(timerInterval); clearInterval(targetInterval);
+            inputs.forEach(input=>input.disabled=false);
+        }
+    });
+
+    resetBtn.addEventListener('click',()=>{
+        running=false;
+        startStopBtn.textContent='開始';
+        clearInterval(timerInterval); clearInterval(targetInterval);
+        seconds=0; updateTimer();
+        fcStartEl.textContent=''; fcEndEl.textContent='';
+        inputs.forEach(input=>input.disabled=false);
+        updateTargetTemp();
+    });
+
+    document.getElementById('firstCrackStart').addEventListener('click',()=>{
+        const mm = String(Math.floor(seconds / 60)).padStart(2,'0');
+        const ss = String(Math.floor(seconds % 60)).padStart(2,'0');
+        fcStartEl.textContent = `${mm}:${ss}`;
+    });
+
+    document.getElementById('firstCrackEnd').addEventListener('click',()=>{
+        const mm = String(Math.floor(seconds / 60)).padStart(2,'0');
+        const ss = String(Math.floor(seconds % 60)).padStart(2,'0');
+        fcEndEl.textContent = `${mm}:${ss}`;
+    });
+
+    function generateImage(){
+        const canvas=document.createElement('canvas');
+        canvas.width=800; canvas.height=400;
+        const ctx=canvas.getContext('2d');
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.strokeStyle='#eee'; ctx.lineWidth=1;
+        for(let x=0;x<=canvas.width;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
+        for(let y=0;y<=canvas.height;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
+        const points=[];
+        for(let i=0;i<5;i++){
+            const t=parseInt(document.getElementById('min'+i).value)*60 + parseInt(document.getElementById('sec'+i).value);
+            const temp=parseFloat(document.getElementById('temp'+i).value);
+            points.push({x:(t/900)*canvas.width, y:canvas.height-(temp/250)*canvas.height});
+        }
+        ctx.strokeStyle='#d00'; ctx.lineWidth=2; ctx.beginPath();
+        points.forEach((p,i)=>{i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}); ctx.stroke();
+        ctx.fillStyle='#007bff'; points.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fill();});
+        document.getElementById('curveImage').src=canvas.toDataURL();
+    }
+
+    for(let i=0;i<5;i++){
+        ['min','sec','temp'].forEach(prefix=>{
+            document.getElementById(prefix+i).addEventListener('input',()=>{generateImage(); updateTargetTemp();});
+        });
+    }
+
+    generateImage(); updateTargetTemp();
+</script>
+
+</body>
+</html>
