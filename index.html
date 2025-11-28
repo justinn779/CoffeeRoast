@@ -2,189 +2,938 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>烘豆計畫</title>
+    <title>烘豆計畫與紀錄</title>
     <style>
         body { font-family: sans-serif; padding: 20px; }
-        table { border-collapse: collapse; margin-bottom: 20px; }
-        th, td { border: 1px solid #000; padding: 8px; text-align: center; }
-        input { width: 50px; }
-        #timer { font-size: 36px; color: red; font-weight: bold; margin-left: 10px; }
-        #targetTemp { font-size: 36px; color: blue; margin-left: 20px; }
-        .btn-log { margin-left: 10px; }
+
+        /* 計時器與控制區 */
+        #timer { font-size: 24px; color: red; font-weight: bold; margin-left: 10px; }
+        #targetTemp { font-size: 20px; color: blue; margin-left: 20px; }
+
+        /* 時間軸表格樣式 */
+        #timelineTable {
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            overflow-x: scroll;
+            width: 100%;
+            max-width: 1200px;
+            font-size: 13px;
+        }
+        #timelineTable th, #timelineTable td {
+            border: 1px solid #000;
+            padding: 3px 2px;
+            text-align: center;
+            min-width: 50px;
+            white-space: nowrap;
+        }
+        #timelineTable select {
+            width: 100%;
+            padding: 1px;
+            border: none;
+            box-sizing: border-box;
+            font-size: 12px;
+        }
+
+        /* RoR 和 Firepower 顯示樣式 */
+        .ror-val { color: darkgreen; font-weight: bold; }
+        .plan-ror-val { color: #800080; font-weight: bold; }
+
+        /* --- 模態視窗樣式 --- */
+        #modalPlan {
+            position: fixed;
+            z-index: 10;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            display: none;
+            padding-top: 50px;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 900px;
+            box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+            border-radius: 8px;
+        }
+        .modal-table-container table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            table-layout: auto;
+        }
+        .modal-table-container th, .modal-table-container td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .modal-table-container select {
+            width: auto;
+            min-width: 80px;
+            padding: 4px;
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+        }
+        /* 時間選擇器的寬度 */
+        .time-select-group select {
+            width: 60px;
+            min-width: 50px;
+        }
+
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-btn:hover, .close-btn:focus {
+            color: #000;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        /* 圖表容器樣式 */
+        #curveContainer {
+            position: relative;
+            width: 850px;
+            height: 450px;
+            margin-top: 20px;
+        }
+
+        /* Canvas 實際尺寸擴大 */
+        #roastCurveCanvas {
+            position: absolute;
+            top: 10px;
+            left: 0;
+            width: 850px;
+            height: 440px;
+            border: 1px solid #000;
+            background-color: #fff;
+        }
     </style>
 </head>
 <body>
 
-<h2>烘豆計畫設定</h2>
-<div>
-    <button id="startStop">計時開始</button>
+<h2 style="display: flex; align-items: center;">
+    ☕ 烘豆計畫與紀錄 </h2>
+<div style="margin-bottom: 15px; display: flex; align-items: center;">
+    <button id="startStop">開始</button>
     <button id="resetBtn">重設</button>
-    <br>
+    <button id="openModalBtn">關鍵點計畫</button>
     <span id="timer">00:00</span>
-    <span id="targetTemp">目標溫度: 0°C</span>
-    <br>
-
-    <span>一爆:</span>
-    <button id="firstCrackStart" class="btn-log">開始</button><span id="fcStartTime"></span>
-    <button id="firstCrackEnd" class="btn-log">結束</button><span id="fcEndTime"></span>
+    <span id="targetTemp">目標溫度: 150.0°C</span>
 </div>
 
-<table>
-    <thead>
-    <tr>
-        <th>階段</th>
-        <th>分鐘</th>
-        <th>秒</th>
-        <th>溫度 (°C)</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr>
-        <td>入豆</td>
-        <td><input type="number" id="min0" value="0" min="0"></td>
-        <td><input type="number" id="sec0" value="0" min="0" max="59"></td>
-        <td><input type="number" id="temp0" value="150"></td>
-    </tr>
-    <tr>
-        <td>回溫</td>
-        <td><input type="number" id="min1" value="1" min="0"></td>
-        <td><input type="number" id="sec1" value="0" min="0" max="59"></td>
-        <td><input type="number" id="temp1" value="120"></td>
-    </tr>
-    <tr>
-        <td>梅納期開始</td>
-        <td><input type="number" id="min2" value="4" min="0"></td>
-        <td><input type="number" id="sec2" value="0" min="0" max="59"></td>
-        <td><input type="number" id="temp2" value="160"></td>
-    </tr>
-    <tr>
-        <td>發展期開始</td>
-        <td><input type="number" id="min3" value="7" min="0"></td>
-        <td><input type="number" id="sec3" value="0" min="0" max="59"></td>
-        <td><input type="number" id="temp3" value="185"></td>
-    </tr>
-    <tr>
-        <td>出鍋</td>
-        <td><input type="number" id="min4" value="10" min="0"></td>
-        <td><input type="number" id="sec4" value="30" min="0" max="59"></td>
-        <td><input type="number" id="temp4" value="205"></td>
-    </tr>
-    </tbody>
-</table>
+<div id="timelineContainer">
+    <table id="timelineTable">
+    </table>
+</div>
 
-<img id="curveImage" src="" alt="烘焙曲線圖片" style="width:800px;height:400px;border:1px solid #000;">
+<div id="curveContainer">
+    <canvas id="roastCurveCanvas"></canvas>
+</div>
+
+
+<div id="modalPlan" class="modal">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h3>設定烘焙關鍵點計畫</h3>
+
+        <button id="autoPlanBtn" style="margin-bottom: 15px;">自動計畫並套用</button>
+
+        <div class="modal-table-container">
+            <table id="keyPointsTable">
+            </table>
+        </div>
+
+    </div>
+</div>
 
 <script>
+    // --- 全域常數與變數 ---
+    const TIME_STEP_SECONDS = 30;
+    const MAX_TIME_MINUTES = 12;
+    const NUM_POINTS = (MAX_TIME_MINUTES * 60 / TIME_STEP_SECONDS) + 1;
+    const MIN_TEMP = 100.0;
+    const MAX_TEMP = 230.0;
+    const TEMP_STEP = 0.5;
+
+    const MIN_POWER = 0.0;
+    const MAX_POWER = 2.0;
+    const POWER_STEP = 0.1;
+
     let seconds = 0;
     let running = false;
     let timerInterval = null;
     let targetInterval = null;
-    const timerEl = document.getElementById('timer');
+    let lastUpdateIndex = -1;
+
+    // 核心資料結構: 儲存所有時間點的計畫和實際資料 (30秒間隔)
+    let roastData = [];
+
+    // 獨立的回溫點數據 (僅保留計畫索引)
+    let actualTAT = {
+        planIndex: 3 // 預設在 01:30 (索引 3)
+    };
+
+    // 儲存關鍵點的計畫數據
+    let PLAN_KEY_POINTS = [
+        { name: '入豆溫', time: 0, temp: 150.0, ror: 0, power: 0.4 },
+        { name: '回溫點 (計畫)', time: 90, temp: 110.0, ror: 0, power: 0.8 },
+        { name: '梅納期', time: 360, temp: 165.0, ror: 0, power: 1.0 },
+        { name: '一爆開始', time: 480, temp: 195.0, ror: 0, power: 0.3 },
+        { name: '一爆結束', time: 570, temp: 210.0, ror: 0, power: 0.5 },
+        { name: '下豆', time: 600, temp: 215.0, ror: 0, power: 0.0 }
+    ];
+
+    // 元素參考
     const startStopBtn = document.getElementById('startStop');
     const resetBtn = document.getElementById('resetBtn');
+    const openModalBtn = document.getElementById('openModalBtn');
+    const modalPlan = document.getElementById('modalPlan');
+    const closeBtn = document.querySelector('.close-btn');
+    const autoPlanBtn = document.getElementById('autoPlanBtn');
+    const keyPointsTable = document.getElementById('keyPointsTable');
+    const timerEl = document.getElementById('timer');
     const targetTempEl = document.getElementById('targetTemp');
-    const fcStartEl = document.getElementById('fcStartTime');
-    const fcEndEl = document.getElementById('fcEndTime');
-    const inputs = [];
-    for(let i=0;i<5;i++){
-        inputs.push(document.getElementById('min'+i));
-        inputs.push(document.getElementById('sec'+i));
-        inputs.push(document.getElementById('temp'+i));
+    const timelineTable = document.getElementById('timelineTable');
+
+    // --- 輔助函式：四捨五入與產生下拉選單選項 ---
+
+    function roundToNearestStep(value, step) {
+        return Math.round(value / step) * step;
     }
 
-    function updateTimer() {
-        const mm = String(Math.floor(seconds / 60)).padStart(2,'0');
-        const ss = String(Math.floor(seconds % 60)).padStart(2,'0');
-        timerEl.textContent = `${mm}:${ss}`;
+    function createTempOptions(min, max, step, defaultValue) {
+        let optionsHTML = '';
+        const fixedDefault = parseFloat(defaultValue).toFixed(1);
+        for (let t = min * 10; t <= max * 10; t += step * 10) {
+            const temp = (t / 10).toFixed(1);
+            const selected = (fixedDefault === temp) ? 'selected' : '';
+            optionsHTML += `<option value="${temp}" ${selected}>${temp}°C</option>`;
+        }
+        return optionsHTML;
     }
 
-    function updateTargetTemp() {
-        const elapsed = seconds;
-        const times = [];
-        for(let i=0;i<5;i++) times.push(parseInt(document.getElementById('min'+i).value)*60 + parseInt(document.getElementById('sec'+i).value));
-        const temps = [];
-        for(let i=0;i<5;i++) temps.push(parseFloat(document.getElementById('temp'+i).value));
+    function createNumericOptions(min, max, step, defaultValue) {
+        let optionsHTML = '';
+        const fixedDefault = parseFloat(defaultValue).toFixed(1);
 
-        let tempNow = temps[0];
-        if(elapsed<=times[0]) tempNow=temps[0];
-        else if(elapsed>=times[4]) tempNow=temps[4];
-        else {
-            for(let i=0;i<4;i++){
-                if(elapsed>=times[i] && elapsed<=times[i+1]){
-                    const ratio=(elapsed-times[i])/(times[i+1]-times[i]);
-                    tempNow=temps[i]+ratio*(temps[i+1]-temps[i]);
-                    break;
+        const minInt = Math.round(min / step);
+        const maxInt = Math.round(max / step);
+
+        for (let i = minInt; i <= maxInt; i++) {
+            const val = (i * step);
+            const fixedVal = val.toFixed(1);
+            const selected = (fixedDefault === fixedVal) ? 'selected' : '';
+            optionsHTML += `<option value="${fixedVal}" ${selected}>${fixedVal}</option>`;
+        }
+        return optionsHTML;
+    }
+
+    function createMinuteSecondOptions(totalSeconds) {
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        let minOptionsHTML = '';
+        for (let m = 0; m <= MAX_TIME_MINUTES; m++) {
+            const selected = (m === minutes) ? 'selected' : '';
+            minOptionsHTML += `<option value="${m}" ${selected}>${String(m).padStart(2, '0')}</option>`;
+        }
+
+        let secOptionsHTML = '';
+        for (let s = 0; s < 60; s++) {
+            const selected = (s === seconds) ? 'selected' : '';
+            secOptionsHTML += `<option value="${s}" ${selected}>${String(s).padStart(2, '0')}</option>`;
+        }
+
+        return { minOptions: minOptionsHTML, secOptions: secOptionsHTML };
+    }
+
+    // --- 核心函式：插值計算與區間火力 (用於 Auto Plan) ---
+
+    function getInterpolatedPlanTemp(timeSeconds, points) {
+        const uniquePoints = [...new Map(points.map(item => [item['time'], item])).values()];
+        uniquePoints.sort((a, b) => a.time - b.time);
+
+        if (uniquePoints.length === 0) return 0;
+
+        if (timeSeconds <= uniquePoints[0].time) return uniquePoints[0].temp;
+        if (timeSeconds >= uniquePoints[uniquePoints.length - 1].time) return uniquePoints[uniquePoints.length - 1].temp;
+
+        for (let i = 0; i < uniquePoints.length - 1; i++) {
+            const p1 = uniquePoints[i];
+            const p2 = uniquePoints[i + 1];
+
+            if (timeSeconds >= p1.time && timeSeconds <= p2.time) {
+                if (timeSeconds === p2.time) return p2.temp;
+
+                const timeRange = p2.time - p1.time;
+                if (timeRange === 0) return p1.temp;
+
+                const tempRange = p2.temp - p1.temp;
+                const ratio = (timeSeconds - p1.time) / timeRange;
+
+                return p1.temp + tempRange * ratio;
+            }
+        }
+
+        return uniquePoints[uniquePoints.length - 1].temp;
+    }
+
+    function getPlanPowerForTime(timeSeconds, points) {
+        const uniquePoints = [...new Map(points.map(item => [item['time'], item])).values()];
+        uniquePoints.sort((a, b) => a.time - b.time);
+
+        if (uniquePoints.length === 0) return 0.0;
+
+        for (let i = uniquePoints.length - 1; i >= 0; i--) {
+            if (timeSeconds >= uniquePoints[i].time) {
+                return uniquePoints[i].power;
+            }
+        }
+
+        return uniquePoints[0].power;
+    }
+
+
+    // --- 關鍵點模態視窗邏輯 ---
+
+    function handleModalTimeInput(index) {
+        const minEl = document.getElementById(`kp_min_${index}`);
+        const secEl = document.getElementById(`kp_sec_${index}`);
+        if (!minEl || !secEl) return;
+        const minutes = parseInt(minEl.value);
+        const seconds = parseInt(secEl.value);
+        let newTime = minutes * 60 + seconds;
+        newTime = Math.min(newTime, MAX_TIME_MINUTES * 60);
+        PLAN_KEY_POINTS[index].time = newTime;
+        updateModalRoRDisplays();
+    }
+
+    function handleModalInput(index, key) {
+        let inputEl = document.getElementById(`kp_${key}_${index}`);
+        if (!inputEl) return;
+        PLAN_KEY_POINTS[index][key] = parseFloat(inputEl.value);
+        updateModalRoRDisplays();
+    }
+
+    function initializeModalTable() {
+        let tableHTML = `
+    <thead>
+      <tr>
+        <th>區間名稱</th>
+        <th>時間 (分:秒)</th>
+        <th>溫度 (°C)</th>
+        <th>RoR (°C/min)</th>
+        <th>火力</th>
+      </tr>
+    </thead>
+    <tbody>
+  `;
+
+        PLAN_KEY_POINTS.forEach((point, index) => {
+            const { minOptions, secOptions } = createMinuteSecondOptions(point.time);
+
+            const timeInput = `
+      <span class="time-select-group">
+        <select id="kp_min_${index}" onchange="handleModalTimeInput(${index})">${minOptions}</select>
+        :
+        <select id="kp_sec_${index}" onchange="handleModalTimeInput(${index})">${secOptions}</select>
+      </span>
+    `;
+
+            const tempOptions = createTempOptions(MIN_TEMP, MAX_TEMP, TEMP_STEP, point.temp);
+            const powerOptions = createNumericOptions(MIN_POWER, MAX_POWER, POWER_STEP, point.power);
+
+            tableHTML += `
+      <tr id="kp_row_${index}">
+        <td>${point.name}</td>
+        <td>${timeInput}</td>
+        <td><select id="kp_temp_${index}" onchange="handleModalInput(${index}, 'temp')">${tempOptions}</select></td>
+        <td id="kp_ror_${index}">0.0</td>
+        <td><select id="kp_power_${index}" onchange="handleModalInput(${index}, 'power')">${powerOptions}</select></td>
+      </tr>
+    `;
+        });
+
+        tableHTML += `</tbody>`;
+        keyPointsTable.innerHTML = tableHTML;
+    }
+
+    function updateModalRoRDisplays() {
+        for (let i = 0; i < PLAN_KEY_POINTS.length; i++) {
+            const rorEl = document.getElementById(`kp_ror_${i}`);
+            if (!rorEl) continue;
+
+            if (i === 0) {
+                rorEl.textContent = '0.0';
+            } else {
+                const current = PLAN_KEY_POINTS[i];
+                const prev = PLAN_KEY_POINTS[i - 1];
+
+                if (current.time <= prev.time) {
+                    rorEl.textContent = 'Err:時間倒退';
+                    continue;
+                }
+
+                const timeDiff = current.time - prev.time;
+                const tempDiff = current.temp - prev.temp;
+
+                const ror = (tempDiff / timeDiff) * 60;
+                rorEl.textContent = ror.toFixed(1);
+            }
+        }
+    }
+
+    function applyKeyPointsToRoastData() {
+        // 找到下豆點，以決定數據和圖表的終點
+        const dropPoint = PLAN_KEY_POINTS.find(p => p.name === '下豆');
+        const dropTime = dropPoint ? dropPoint.time : Infinity;
+
+        for (let i = 0; i < NUM_POINTS; i++) {
+            const totalSeconds = i * TIME_STEP_SECONDS;
+
+            const newPlanTemp = getInterpolatedPlanTemp(totalSeconds, PLAN_KEY_POINTS);
+            const finalPlanTemp = roundToNearestStep(newPlanTemp, 0.5);
+            const finalPlanTempFixed = parseFloat(finalPlanTemp.toFixed(1));
+
+            const newPlanPower = getPlanPowerForTime(totalSeconds, PLAN_KEY_POINTS);
+            const finalPlanPower = roundToNearestStep(newPlanPower, POWER_STEP);
+
+            if (totalSeconds > dropTime) {
+                // 在下豆時間之後，將數據設為0或null，並在表格中顯示 '-'
+                roastData[i].planTemp = 0;
+                roastData[i].actualTemp = 0;
+                roastData[i].planPower = 0;
+                roastData[i].actualPower = 0;
+
+                // 直接修改表格單元格內容為 '-'
+                let ptParent = document.getElementById(`pt_${i}`)?.parentNode;
+                if (ptParent) ptParent.innerHTML = '-';
+                let atParent = document.getElementById(`at_${i}`)?.parentNode;
+                if (atParent) atParent.innerHTML = '-';
+                let ppParent = document.getElementById(`pp_${i}`)?.parentNode;
+                if (ppParent) ppParent.innerHTML = '-';
+                let apParent = document.getElementById(`ap_${i}`)?.parentNode;
+                if (apParent) apParent.innerHTML = '-';
+                document.getElementById(`pror_${i}`).textContent = '-';
+                document.getElementById(`aror_${i}`).textContent = '-';
+
+            } else {
+                // 在下豆時間之前，正常更新數據和下拉選單
+                roastData[i].planTemp = finalPlanTempFixed;
+                roastData[i].actualTemp = finalPlanTempFixed; // 同步實際溫度
+                roastData[i].planPower = parseFloat(finalPlanPower.toFixed(1));
+
+                const ptSelect = document.getElementById(`pt_${i}`);
+                if (ptSelect) ptSelect.value = roastData[i].planTemp.toFixed(1);
+
+                const atSelect = document.getElementById(`at_${i}`);
+                if (atSelect) atSelect.value = roastData[i].actualTemp.toFixed(1);
+
+                const ppSelect = document.getElementById(`pp_${i}`);
+                if (ppSelect) ppSelect.value = roastData[i].planPower.toFixed(1);
+
+                const apSelect = document.getElementById(`ap_${i}`);
+                if (apSelect) apSelect.value = roastData[i].planPower.toFixed(1); // 同步實際火力
+            }
+        }
+
+        // 更新 TAT 索引
+        const planTATPoint = PLAN_KEY_POINTS.find(p => p.name.includes('回溫點'));
+        if (planTATPoint) {
+            actualTAT.planIndex = Math.round(planTATPoint.time / TIME_STEP_SECONDS);
+        }
+
+        updateAllPlanRoR();
+        updateActualRoRChain(0); // 更新實際 RoR
+        updateTargetTempDisplay();
+        generateImage();
+
+        closePlanModal();
+    }
+
+    function openPlanModal() {
+        initializeModalTable();
+        updateModalRoRDisplays();
+        modalPlan.style.display = 'block';
+    }
+
+    function closePlanModal() {
+        modalPlan.style.display = 'none';
+    }
+
+
+    // --- 主表格建構與初始化 ---
+
+    function initializeRoastDataAndTable() {
+        document.querySelectorAll('.current-time').forEach(el => el.classList.remove('current-time'));
+
+        roastData = [];
+
+        const timeRow = document.createElement('tr');
+        const planTempRow = document.createElement('tr');
+        const planRoRRow = document.createElement('tr');
+        const planPowerRow = document.createElement('tr');
+        const actualTempRow = document.createElement('tr');
+        const actualRoRRow = document.createElement('tr');
+        const actualPowerRow = document.createElement('tr');
+
+        timeRow.innerHTML = '<th>時間</th>';
+        planTempRow.innerHTML = '<th>計畫溫度</th>';
+        planRoRRow.innerHTML = '<th>計畫 RoR</th>';
+        planPowerRow.innerHTML = `<th>計畫火力</th>`;
+        actualTempRow.innerHTML = '<th>實際溫度</th>';
+        actualRoRRow.innerHTML = '<th>實際 RoR</th>';
+        actualPowerRow.innerHTML = `<th>實際火力</th>`;
+
+
+        for (let i = 0; i < NUM_POINTS; i++) {
+            const totalSeconds = i * TIME_STEP_SECONDS;
+            const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+            const ss = String(totalSeconds % 60).padStart(2, '0');
+            const timeLabel = `${mm}:${ss}`;
+
+            const interpolatedTemp = getInterpolatedPlanTemp(totalSeconds, PLAN_KEY_POINTS);
+            const initialPlanTemp = roundToNearestStep(interpolatedTemp, 0.5);
+
+            const initialPlanPower = getPlanPowerForTime(totalSeconds, PLAN_KEY_POINTS);
+
+            // 實際溫度現在總是從計畫溫度開始
+            const defaultActualTemp = initialPlanTemp;
+
+            roastData.push({
+                time: totalSeconds,
+                planTemp: parseFloat(initialPlanTemp.toFixed(1)),
+                planRoR: 0,
+                planPower: parseFloat(initialPlanPower.toFixed(1)),
+                actualTemp: parseFloat(defaultActualTemp.toFixed(1)), // 使用計畫溫度
+                actualPower: parseFloat(initialPlanPower.toFixed(1)),
+            });
+
+            // --- 建立表格欄位 (Columns) ---
+            timeRow.innerHTML += `<td id="time_${i}">${timeLabel}</td>`;
+
+            const tempOptions = createTempOptions(MIN_TEMP, MAX_TEMP, TEMP_STEP, roastData[i].planTemp);
+            planTempRow.innerHTML += `<td><select id="pt_${i}" onchange="handlePlanInput(${i}, 'pt')">${tempOptions}</select></td>`;
+
+            planRoRRow.innerHTML += `<td id="pror_${i}" class="plan-ror-val">0.0</td>`;
+
+            const powerOptions = createNumericOptions(MIN_POWER, MAX_POWER, POWER_STEP, roastData[i].planPower);
+            planPowerRow.innerHTML += `<td><select id="pp_${i}" onchange="handlePlanInput(${i}, 'pp')">${powerOptions}</select></td>`;
+
+            // 實際溫度使用 defaultActualTemp (即 initialPlanTemp)
+            const actualTempOptions = createTempOptions(MIN_TEMP, MAX_TEMP, TEMP_STEP, defaultActualTemp);
+            actualTempRow.innerHTML += `<td><select id="at_${i}" onchange="handleActualInput(${i})">${actualTempOptions}</select></td>`;
+
+            actualRoRRow.innerHTML += `<td id="aror_${i}" class="ror-val">0.0</td>`;
+
+            const actualPowerOptions = createNumericOptions(MIN_POWER, MAX_POWER, POWER_STEP, roastData[i].actualPower);
+            actualPowerRow.innerHTML += `<td><select id="ap_${i}" onchange="handleActualPowerInput(${i})">${actualPowerOptions}</select></td>`;
+        }
+
+
+        // 重建表格
+        timelineTable.innerHTML = '';
+        timelineTable.appendChild(timeRow);
+        timelineTable.appendChild(planTempRow);
+        timelineTable.appendChild(planRoRRow);
+        timelineTable.appendChild(planPowerRow);
+        timelineTable.appendChild(actualTempRow);
+        timelineTable.appendChild(actualRoRRow);
+        timelineTable.appendChild(actualPowerRow);
+
+
+        updateAllPlanRoR();
+        updateActualRoRChain(0); // 初始化實際 RoR
+        updateTargetTempDisplay();
+    }
+
+
+    // --- 輸入處理函式 ---
+
+    function calculateRoR(currentIndex, tempKey) {
+        if (currentIndex === 0) return 0;
+        const T_now = parseFloat(roastData[currentIndex][tempKey]);
+        const T_prev = parseFloat(roastData[currentIndex - 1][tempKey]);
+        // 排除當前溫度或前一溫度為零導致的計算錯誤，但只有實際溫度需要判斷是否已記錄
+        if (tempKey === 'actualTemp' && (T_prev === 0.0 || T_prev === undefined)) return NaN;
+        if (isNaN(T_now) || isNaN(T_prev)) return 0;
+        return (T_now - T_prev) * 2;
+    }
+
+    function updateAllPlanRoR() {
+        for (let i = 0; i < NUM_POINTS; i++) {
+            const ror = calculateRoR(i, 'planTemp');
+            const rorEl = document.getElementById(`pror_${i}`);
+            if (rorEl) {
+                // RoR 為 0 時顯示 0.0
+                rorEl.textContent = ror.toFixed(1);
+                roastData[i].planRoR = ror;
+            }
+        }
+    }
+
+    function updateActualRoRChain(startIndex) {
+        for (let i = startIndex; i < NUM_POINTS; i++) {
+            const ror = calculateRoR(i, 'actualTemp');
+            const rorEl = document.getElementById(`aror_${i}`);
+            if (rorEl) {
+                // RoR 為 NaN 時仍為 --，否則顯示數值 (包含 0.0)
+                if (isNaN(ror)) {
+                    rorEl.textContent = '--';
+                } else {
+                    rorEl.textContent = ror.toFixed(1);
                 }
             }
         }
-        targetTempEl.textContent=`目標溫度: ${tempNow.toFixed(1)}°C`;
     }
 
-    startStopBtn.addEventListener('click',()=>{
-        running = !running;
-        if(running){
-            startStopBtn.textContent='停止';
-            inputs.forEach(input=>input.disabled=true);
-            timerInterval=setInterval(()=>{ seconds+=0.1; updateTimer(); },100);
-            targetInterval=setInterval(updateTargetTemp,100);
-        }else{
-            startStopBtn.textContent='開始';
-            clearInterval(timerInterval); clearInterval(targetInterval);
-            inputs.forEach(input=>input.disabled=false);
+    function handlePlanInput(index, key) {
+        const selectEl = document.getElementById(key + '_' + index);
+        if (!selectEl) return;
+        const newValue = parseFloat(selectEl.value);
+        const dataKey = (key === 'pt') ? 'planTemp' : 'planPower';
+        roastData[index][dataKey] = newValue;
+
+        if (dataKey === 'planTemp') {
+            // 同步更新實際溫度並更新下拉選單
+            roastData[index].actualTemp = newValue;
+            const atSelect = document.getElementById(`at_${index}`);
+            if (atSelect) {
+                atSelect.value = newValue.toFixed(1);
+            }
+            updateActualRoRChain(index);
+
+            // 更新 PLAN_KEY_POINTS 數據 (當用戶在表格中手動修改與 TAT 點時間重疊的點時)
+            if (index === actualTAT.planIndex) {
+                const planTATIndex = PLAN_KEY_POINTS.findIndex(p => p.name.includes('回溫點'));
+                if (planTATIndex !== -1) {
+                    PLAN_KEY_POINTS[planTATIndex].temp = newValue;
+                }
+            }
         }
-    });
 
-    resetBtn.addEventListener('click',()=>{
-        running=false;
-        startStopBtn.textContent='開始';
-        clearInterval(timerInterval); clearInterval(targetInterval);
-        seconds=0; updateTimer();
-        fcStartEl.textContent=''; fcEndEl.textContent='';
-        inputs.forEach(input=>input.disabled=false);
-        updateTargetTemp();
-    });
+        // 更新 PLAN_KEY_POINTS 數據 (power)
+        if (dataKey === 'planPower' && index === actualTAT.planIndex) {
+            const planTATIndex = PLAN_KEY_POINTS.findIndex(p => p.name.includes('回溫點'));
+            if (planTATIndex !== -1) {
+                PLAN_KEY_POINTS[planTATIndex].power = newValue;
+            }
+        }
 
-    document.getElementById('firstCrackStart').addEventListener('click',()=>{
-        const mm = String(Math.floor(seconds / 60)).padStart(2,'0');
-        const ss = String(Math.floor(seconds % 60)).padStart(2,'0');
-        fcStartEl.textContent = `${mm}:${ss}`;
-    });
+        updateAllPlanRoR();
+        updateTargetTempDisplay();
+        generateImage();
+    }
 
-    document.getElementById('firstCrackEnd').addEventListener('click',()=>{
-        const mm = String(Math.floor(seconds / 60)).padStart(2,'0');
-        const ss = String(Math.floor(seconds % 60)).padStart(2,'0');
-        fcEndEl.textContent = `${mm}:${ss}`;
-    });
+    function handleActualInput(index) {
+        // 注意：一旦用戶手動修改實際溫度，它就會脫離計畫同步
+        const selectEl = document.getElementById(`at_${index}`);
+        if (!selectEl) return;
+        roastData[index].actualTemp = parseFloat(selectEl.value);
+        updateActualRoRChain(index);
+        generateImage();
+    }
+
+    function handleActualPowerInput(index) {
+        const selectEl = document.getElementById(`ap_${index}`);
+        if (!selectEl) return;
+        roastData[index].actualPower = parseFloat(selectEl.value);
+        generateImage();
+    }
+
+
+    function updateTargetTempDisplay() {
+        const totalSeconds = seconds;
+        let targetTemp = '--';
+        for (let i = 0; i < NUM_POINTS - 1; i++) {
+            const t1 = roastData[i].time;
+            const t2 = roastData[i + 1].time;
+            if (totalSeconds >= t1 && totalSeconds <= t2) {
+                targetTemp = roastData[lastUpdateIndex]?.planTemp || roastData[i].planTemp;
+                break;
+            } else if (i === NUM_POINTS - 2 && totalSeconds > t2) {
+                targetTemp = roastData[NUM_POINTS - 1].planTemp;
+                break;
+            }
+        }
+        targetTempEl.textContent = `目標溫度: ${targetTemp === '--' ? '--' : parseFloat(targetTemp).toFixed(1) + '°C'}`;
+    }
+
+    function updateTimer() {
+        seconds += 0.1;
+        const totalSeconds = Math.floor(seconds);
+        const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const ss = String(totalSeconds % 60).padStart(2, '0');
+        timerEl.textContent = `${mm}:${ss}`;
+
+        const currentIndex = Math.min(Math.floor(totalSeconds / TIME_STEP_SECONDS), NUM_POINTS - 1);
+
+        if (currentIndex !== lastUpdateIndex) {
+            if (lastUpdateIndex !== -1) {
+                document.querySelectorAll('.current-time').forEach(el => el.classList.remove('current-time'));
+            }
+
+            if (currentIndex < NUM_POINTS) {
+                const elementsToHighlight = [
+                    document.getElementById(`time_${currentIndex}`),
+                    document.getElementById(`pt_${currentIndex}`)?.parentNode,
+                    document.getElementById(`pror_${currentIndex}`),
+                    document.getElementById(`pp_${currentIndex}`)?.parentNode,
+                    document.getElementById(`at_${currentIndex}`)?.parentNode,
+                    document.getElementById(`aror_${currentIndex}`),
+                    document.getElementById(`ap_${currentIndex}`)?.parentNode,
+                ];
+
+                elementsToHighlight.forEach(el => el && el.classList.add('current-time'));
+
+                const currentCell = document.getElementById(`time_${currentIndex}`);
+                if (currentCell) {
+                    currentCell.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+                }
+            }
+            lastUpdateIndex = currentIndex;
+            updateTargetTempDisplay();
+        }
+    }
 
     function generateImage(){
-        const canvas=document.createElement('canvas');
-        canvas.width=800; canvas.height=400;
+        const canvasWidth = 850;
+        const canvasHeight = 440;
+        const offsetX = 70;
+        const plotWidth = canvasWidth - offsetX - 10;
+        const plotHeight = canvasHeight - 40;
+        const maxTime = MAX_TIME_MINUTES * 60;
+        const maxTemp = 250;
+        const minTemp = 75;
+        const tempRange = maxTemp - minTemp;
+
+        const canvas = document.getElementById('roastCurveCanvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
         const ctx=canvas.getContext('2d');
-        ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.strokeStyle='#eee'; ctx.lineWidth=1;
-        for(let x=0;x<=canvas.width;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
-        for(let y=0;y<=canvas.height;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
-        const points=[];
-        for(let i=0;i<5;i++){
-            const t=parseInt(document.getElementById('min'+i).value)*60 + parseInt(document.getElementById('sec'+i).value);
-            const temp=parseFloat(document.getElementById('temp'+i).value);
-            points.push({x:(t/900)*canvas.width, y:canvas.height-(temp/250)*canvas.height});
+
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvasWidth,canvasHeight);
+
+        const scaleX = plotWidth / maxTime;
+        const scaleY = plotHeight / tempRange;
+
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#000';
+
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(offsetX, 0, plotWidth, plotHeight);
+
+        const tempStep = 25;
+        ctx.textAlign = 'right';
+        for(let temp=maxTemp; temp>=minTemp; temp-=tempStep){
+            const y = plotHeight - (temp - minTemp) * scaleY;
+            ctx.strokeStyle = '#eee';
+            ctx.lineWidth=1;
+            ctx.beginPath();
+            ctx.moveTo(offsetX, y);
+            ctx.lineTo(canvasWidth - 10, y);
+            ctx.stroke();
+            ctx.fillText(`${temp}°C`, offsetX - 5, y + 4);
         }
-        ctx.strokeStyle='#d00'; ctx.lineWidth=2; ctx.beginPath();
-        points.forEach((p,i)=>{i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}); ctx.stroke();
-        ctx.fillStyle='#007bff'; points.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fill();});
-        document.getElementById('curveImage').src=canvas.toDataURL();
-    }
 
-    for(let i=0;i<5;i++){
-        ['min','sec','temp'].forEach(prefix=>{
-            document.getElementById(prefix+i).addEventListener('input',()=>{generateImage(); updateTargetTemp();});
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.translate(15, plotHeight / 2 + 15);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('溫度 (°C)', 0, 0);
+        ctx.restore();
+
+        const timeStep = 60;
+        ctx.textBaseline = 'top';
+        for(let t=0; t<=maxTime; t+=timeStep){
+            const x = t * scaleX + offsetX;
+            ctx.strokeStyle = '#eee';
+            ctx.lineWidth=1;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, plotHeight);
+            ctx.stroke();
+
+            ctx.textAlign = 'center';
+            const mm = String(Math.floor(t / 60)).padStart(2,'0');
+            const ss = String(t % 60).padStart(2,'0');
+            ctx.fillText(`${mm}:${ss}`, x, plotHeight + 5);
+        }
+
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText('時間 (分:秒)', offsetX + plotWidth / 2, plotHeight + 30);
+
+
+        // 1. 計畫曲線 (紅線)
+        const planPoints = roastData
+            .filter(data => data.planTemp > 0) // 過濾掉下豆後溫度為0的點
+            .map(data => ({
+                x: data.time * scaleX + offsetX,
+                y: plotHeight - (data.planTemp - minTemp) * scaleY
+            }));
+
+        ctx.strokeStyle='rgba(255, 140, 0, 0.7)'; // 橘色半透明
+        ctx.lineWidth=3;
+        ctx.beginPath();
+        planPoints.forEach((p,i)=>{i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
+        ctx.stroke();
+        ctx.fillStyle='rgba(255, 140, 0, 0.7)'; // 橘色半透明
+        planPoints.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,2.5,0,Math.PI*2);ctx.fill();});
+
+        // 標註計畫入豆溫
+        ctx.fillStyle = '#00f';
+        ctx.beginPath();
+        ctx.arc(planPoints[0].x, planPoints[0].y, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+
+        // 2. 實際曲線 (藍線)
+        let allActualPoints = [];
+
+        roastData.forEach(data => {
+            // 只包含實際溫度大於0的點 (下豆後會是0)
+            if (data.actualTemp > 0) {
+                allActualPoints.push({
+                    time: data.time,
+                    temp: data.actualTemp
+                });
+            }
         });
+
+        allActualPoints.sort((a, b) => a.time - b.time);
+
+        if (allActualPoints.length > 0) {
+            ctx.strokeStyle='rgba(0, 158, 115, 0.7)'; // 藍綠色半透明
+            ctx.lineWidth=3;
+            ctx.beginPath();
+
+            // 繪製線條
+            allActualPoints.forEach((data, i) => {
+                const x = data.time * scaleX + offsetX;
+                const y = plotHeight - (data.temp - minTemp) * scaleY;
+
+                if(i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y); // 確保線條連接
+                }
+            });
+            ctx.stroke();
+
+            // 繪製點 (在線條上方)
+            allActualPoints.forEach((data) => {
+                const x = data.time * scaleX + offsetX;
+                const y = plotHeight - (data.temp - minTemp) * scaleY;
+                ctx.fillStyle='rgba(0, 158, 115, 0.7)'; // 藍綠色半透明
+                ctx.beginPath();
+                ctx.arc(x, y, 2.5, 0, Math.PI*2);
+                ctx.fill();
+            });
+        }
+
+        // 3. 圖例 (調整字體大小和位置)
+        ctx.font = '14px sans-serif'; // 圖例字體稍大
+        ctx.textAlign = 'left';
+
+        const legendX = canvasWidth - 140; // 將圖例區塊往左移
+
+        ctx.fillStyle = 'rgba(255, 140, 0, 0.7)'; // 橘色
+        ctx.fillRect(legendX, 10, 10, 10); // Y座標從 5 改為 10
+        ctx.fillStyle = '#333';
+        ctx.fillText('計畫曲線', legendX + 15, 10 + 9); // Y座標同步下移並微調對齊
+
+        ctx.fillStyle = 'rgba(0, 158, 115, 0.7)'; // 藍綠色
+        ctx.fillRect(legendX, 30, 10, 10); // Y座標從 25 改為 30
+        ctx.fillStyle = '#333';
+        ctx.fillText('實際曲線', legendX + 15, 30 + 9); // Y座標同步下移並微調對齊
     }
 
-    generateImage(); updateTargetTemp();
+
+    // --- 事件監聽器 / 啟動時執行初始化 ---
+
+    openModalBtn.addEventListener('click', openPlanModal);
+    closeBtn.addEventListener('click', closePlanModal);
+    autoPlanBtn.addEventListener('click', applyKeyPointsToRoastData);
+    window.addEventListener('click', (event) => {
+        if (event.target === modalPlan) {
+            closePlanModal();
+        }
+    });
+
+    startStopBtn.addEventListener('click', () => {
+        running = !running;
+        if (running) {
+            startStopBtn.textContent = '停止';
+
+            // 禁用計畫輸入
+            for(let i = 0; i < NUM_POINTS; i++) {
+                const pt = document.getElementById(`pt_${i}`);
+                const pp = document.getElementById(`pp_${i}`);
+                if(pt) pt.disabled = true;
+                if(pp) pp.disabled = true;
+            }
+
+            timerInterval = setInterval(updateTimer, 100);
+            targetInterval = setInterval(() => {
+                updateTargetTempDisplay();
+                generateImage();
+            }, 1000);
+        } else {
+            startStopBtn.textContent = '開始';
+            clearInterval(timerInterval);
+            clearInterval(targetInterval);
+            // 停止時重新啟用計畫輸入
+            for(let i = 0; i < NUM_POINTS; i++) {
+                const pt = document.getElementById(`pt_${i}`);
+                const pp = document.getElementById(`pp_${i}`);
+                if(pt) pt.disabled = false;
+                if(pp) pp.disabled = false;
+            }
+
+            document.querySelectorAll('.current-time').forEach(el => el.classList.remove('current-time'));
+        }
+    });
+
+    resetBtn.addEventListener('click', () => {
+        running = false;
+        startStopBtn.textContent = '開始';
+        clearInterval(timerInterval);
+        clearInterval(targetInterval);
+        seconds = 0;
+        timerEl.textContent = '00:00';
+        lastUpdateIndex = -1;
+
+        // 重設 TAT 數據 (planIndex)
+        actualTAT.planIndex = 3;
+
+        // 更新 PLAN_KEY_POINTS 裡的 TAT 點
+        const planTATIndex = PLAN_KEY_POINTS.findIndex(p => p.name.includes('回溫點'));
+        if (planTATIndex !== -1) {
+            // 為了確保重設後的 Plan TAT time/temp 是正確的，這裡使用預設值或現有數據
+            PLAN_KEY_POINTS[planTATIndex].time = 90;
+            PLAN_KEY_POINTS[planTATIndex].temp = 110.0;
+        }
+
+        initializeRoastDataAndTable();
+        // 重設時，需要確保表格是完整的，所以先初始化再繪圖
+        generateImage();
+    });
+
+    initializeRoastDataAndTable();
+    generateImage();
 </script>
 
 </body>
 </html>
-
